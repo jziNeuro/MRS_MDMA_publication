@@ -1,0 +1,296 @@
+---
+title: "Chronic 3,4-Methylenedioxymethamphetamine (MDMA) use is related to glutamate and GABA concentrations in the striatum, but not in the anterior cingulate cortex"
+author: "Josua Zimmermann"
+date: "21.4.2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, warning=F, message = F)
+```
+
+
+```{r}
+rm(list=ls())
+
+# load required packages
+library(tidyverse)
+library(knitr)
+library(sjPlot)
+library(ggsci)
+library(patchwork)
+library(robustbase)
+
+source("used_functions.R")
+
+
+# load data
+data_path <- "Data"
+df <- read.csv(file.path(data_path, "MRS_MDMA_data.csv"))
+
+```
+
+
+# RESULTS INCLUDED IN MAIN MANUSCRIPT
+
+
+## LINEAR REGRESSION TO ESTIMATE GROUP DIFFERENCES
+
+```{r}
+
+# COMPUTE LINEAR REGRESSIONS TO ESTIMATE GROUP EFFECTS
+
+# predictor of interest
+predictor <- "Group"
+
+# predictors to include as covariates in model
+# - covariates regarding co-use of other substances are log-transformed (constant of 1 is added because of zero values)
+covariates <- c("Age", "Gender", "log(Alcohol_amount_last_6months_gram + 1)", "log(THC_hairconcentration + 1)", "log(Stimulants_hairconcentration + 1)")
+
+# measured regions
+regions <- c("L Striatum", "ACC")
+
+# measured outcomes of both sequences (MEGA-PRESS and PRESS)
+outcomes <- c("GABA",  "GLX_MEGAdiff", "GLX_MEGAoff", "GLX_PRESS")
+
+
+# initiate list to store model outputs
+model_results <- list()
+
+# loop over all regions and measures to compute linear regression
+for (reg in regions){
+  for (outc in outcomes){
+    
+    # get model formula
+    model_formula <- as.formula(paste(paste0("scale(",outc,")"), paste(c(predictor, covariates), collapse = "+"), sep = "~"))
+    # get model coefficients (and store in list)
+    model_results[[reg]][[outc]] <- lm(model_formula, filter(df, Region == reg))    
+    
+  }
+}
+
+
+# SHOW TABLE WITH COMPLETE REGRESSION OUTCOMES
+
+# labels for coefficients
+pred_labels <- c("(Intercept)", "Group [MD]", "Age", "Gender [Male]", "Alcohol use", "Cannabis use", "Stimulant use")
+# label for outcomes
+dv_label <- c("GABA MEGAdiff", "GLX MEGAdiff", "GLX MEGAoff", "GLX PRESS")
+
+# show table for the left striatum
+tab_model(model_results[["L Striatum"]], pred.labels = pred_labels, dv.labels = dv_label, show.ci=F, title="Left Striatum", show.stat=T)
+
+```
+
+$~$
+$~$
+
+```{r}
+# show table for the ACC
+tab_model(model_results[["ACC"]], pred.labels = pred_labels, dv.labels = dv_label, show.ci=F, title="Anterior cingulate cortex", show.stat=T)
+
+```
+
+$~$
+$~$
+
+## BOXPLOTS TO SHOW GROUP DIFFERENCES
+
+```{r}
+
+# BOXPLOTS TO DISPLAY GROUP DIFFERENCES IN LEFT STIATUM
+boxplot_GLX <- boxplot_groups("GLX_MEGAdiff", "Group", filter(df, Region=="L Striatum"), "GLX MEGAdiff [mol/kg]", c("Control", "MDMA"), "0.008")
+
+boxplot_GABA <- boxplot_groups("GABA", "Group", filter(df, Region=="L Striatum"), "GABA MEGAdiff [mol/kg]", c("Control", "MDMA"), "0.31")
+
+
+# PLOT CORRELATION BETWEEN GABA IN LEFT STRIATUM AND MDMA USE FREQUENCY
+robcorr_GABA <- plot_robust_correlation("GABA", "MDMA_occasions_last_6months", filter(df, Region == "L Striatum" & Group == "MD"), "GABA MEGAdiff [mol/kg]", "log(MDMA occasions last 6 months)", TRUE, 5)
+
+
+# plot all as subplots
+boxplot_GLX + boxplot_GABA
+
+robcorr_GABA
+
+``` 
+
+
+$~$
+$~$
+
+## EXPLORATORY ANALYSIS TO DISENTANGLE GLUTAMATE AND GLUTAMINE
+To exploratory assess whether observed significant group difference in the left striatum is driven by glutamate or glutamine, we computed group differences for both metabolites.
+
+```{r}
+
+outcomes_expl <- c("GLU_MEGAdiff", "GLN_MEGAdiff")
+region_expl <- "L Striatum"
+
+# initiate list to store model outputs
+model_results_expl <- list()
+
+# loop over all regions and measures to compute linear regression
+for (reg in region_expl){
+  for (outc in outcomes_expl){
+    
+    # get model formula
+    model_formula <- as.formula(paste(paste0("scale(",outc,")"), paste(c(predictor, covariates), collapse = "+"), sep = "~"))
+    # get model coefficients (and store in list)
+    model_results_expl[[reg]][[outc]] <- lm(model_formula, filter(df, Region == reg))    
+    
+  }
+}
+
+
+# SHOW TABLE WITH COMPLETE REGRESSION OUTCOMES
+
+# show table for the left striatum
+tab_model(model_results_expl[["L Striatum"]], pred.labels = pred_labels, dv.labels = c("Glutamate", "Glutamine"), show.ci=F, title="Left Striatum", show.stat=T)
+
+```
+
+$~$
+$~$
+
+## AGREEMENT OF PRESS AND MEGA-PRESS GLX MEASUREMENTS
+
+
+```{r}
+
+
+# PLOT CORRELATION BETWEEN GLX from MEGA-PRESS and PRESS
+
+# left striatum
+robcorr_GLXdiff_LS <- plot_robust_correlation("GLX_MEGAdiff", "GLX_PRESS", filter(df, Region == "L Striatum"),"GLX MEGAdiff [mol/kg]", "GLX PRESS [mol/kg]", FALSE, 1)
+
+robcorr_GLXoff_LS <- plot_robust_correlation("GLX_MEGAoff", "GLX_PRESS", filter(df, Region == "L Striatum"), "GLX MEGAoff [mol/kg]", "GLX PRESS [mol/kg]", FALSE, 1)
+
+robcorr_GLX_MEGA_LS <- plot_robust_correlation("GLX_MEGAdiff", "GLX_MEGAoff", filter(df, Region == "L Striatum"), "GLX MEGAdiff [mol/kg]", "GLX MEGAoff [mol/kg]", FALSE, 1)
+
+
+# ACC
+robcorr_GLXdiff_ACC <- plot_robust_correlation("GLX_MEGAdiff", "GLX_PRESS", filter(df, Region == "ACC"),"GLX MEGAdiff [mol/kg]", "GLX PRESS [mol/kg]", FALSE, 1)
+
+robcorr_GLXoff_ACC <- plot_robust_correlation("GLX_MEGAoff", "GLX_PRESS", filter(df, Region == "ACC"), "GLX MEGAoff [mol/kg]", "GLX PRESS [mol/kg]", FALSE, 1)
+
+robcorr_GLX_MEGA_ACC <- plot_robust_correlation("GLX_MEGAdiff", "GLX_MEGAoff", filter(df, Region == "ACC"), "GLX MEGAdiff [mol/kg]", "GLX MEGAoff [mol/kg]", FALSE, 1)
+
+```
+
+
+### Left striatum
+
+```{r}
+
+# Left striatum: print correlation of GLX between different sequences
+robcorr_GLXdiff_LS + robcorr_GLXoff_LS
+
+robcorr_GLX_MEGA_LS
+
+```
+
+$~$
+
+### Anterior cingulate cortex
+
+```{r}
+
+# ACC: print correlation of GLX between different sequences
+robcorr_GLXdiff_ACC + robcorr_GLXoff_ACC
+
+robcorr_GLX_MEGA_ACC
+
+
+```
+
+
+$~$
+$~$
+$~$
+
+# RESULTS INCLUDED IN THE SUPPLEMENT
+
+## ROBUST REGRESSION TO ESTIMATE GROUP DIFFERENCES
+
+To confirm reliablity of results, i.e., to ensure that outlier data points do not influence observed significant group differences, we compute robust regression models.
+
+```{r}
+
+# COMPUTE ROBUST REGRESSIONS TO ESTIMATE GROUP EFFECTS
+
+# initiate list to store model outputs
+model_results_robust <- list()
+
+# loop over all regions and measures to compute linear regression
+for (reg in regions){
+  for (outc in outcomes){
+    
+    # get model formula
+    model_formula <- as.formula(paste(paste0("scale(",outc,")"), paste(c(predictor, covariates), collapse = "+"), sep = "~"))
+    # get model coefficients (and store in list)
+    model_results_robust[[reg]][[outc]] <- lmrob(model_formula, filter(df, Region == reg))    
+    
+  }
+}
+
+
+# SHOW TABLE WITH COMPLETE "ROBUST" REGRESSION OUTCOMES
+
+# show table for the left striatum
+tab_model(model_results_robust[["L Striatum"]], pred.labels = pred_labels, dv.labels = dv_label, show.ci=F, title="Left Striatum", show.stat=T)
+
+```
+
+$~$
+$~$
+
+```{r}
+# show table for the ACC
+tab_model(model_results_robust[["ACC"]], pred.labels = pred_labels, dv.labels = dv_label, show.ci=F, title="Anterior cingulate cortex", show.stat=T)
+
+
+```
+
+$~$
+$~$
+
+## AGREEMENT OF PRESS and MEGA-PRESS REGARDING CREATINE AND NAA
+
+```{r}
+
+# correlation between creatine as well as NAA between PRESS and MEGA-PRESS
+
+# left striatum
+robcorr_CRE_LS <- plot_robust_correlation("CRE_MEGAoff", "CRE_PRESS", filter(df, Region == "L Striatum"),"Creatine MEGAoff [mol/kg]", "Creatine PRESS [mol/kg]", FALSE, 1)
+
+robcorr_NAA_LS <- plot_robust_correlation("NAA_MEGAoff", "NAA_PRESS", filter(df, Region == "L Striatum"),"NAA MEGAoff [mol/kg]", "NAA PRESS [mol/kg]", FALSE, 1)
+
+
+# ACC
+robcorr_CRE_ACC <- plot_robust_correlation("CRE_MEGAoff", "CRE_PRESS", filter(df, Region == "ACC"),"Creatine MEGAoff [mol/kg]", "Creatine PRESS [mol/kg]", FALSE, 1)
+
+robcorr_NAA_ACC <- plot_robust_correlation("NAA_MEGAoff", "NAA_PRESS", filter(df, Region == "ACC"),"NAA MEGAoff [mol/kg]", "NAA PRESS [mol/kg]", FALSE, 1)
+
+```
+
+
+### Left striatum
+
+```{r}
+
+# left striatum
+robcorr_CRE_LS + robcorr_NAA_LS
+
+```
+
+$~$
+
+# ACC
+
+```{r}
+
+# ACC
+robcorr_CRE_ACC + robcorr_NAA_ACC
+
+```
